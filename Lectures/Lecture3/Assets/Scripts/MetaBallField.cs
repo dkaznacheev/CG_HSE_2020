@@ -9,6 +9,9 @@ public class MetaBallField
     public float BallRadius = 1;
 
     private Vector3[] _ballPositions;
+
+    public Vector3 minPoint;
+    public Vector3 maxPoint;
     
     /// <summary>
     /// Call Field.Update to react to ball position and parameters in run-time.
@@ -16,6 +19,21 @@ public class MetaBallField
     public void Update()
     {
         _ballPositions = Balls.Select(x => x.position).ToArray();
+        
+        // Uncomment for animation!
+        // _ballPositions[0] += Mathf.Sin(Time.time) * Vector3.forward;
+        // _ballPositions[1] += 2f * Mathf.Sin(Time.time) * Vector3.down;
+        // _ballPositions[2] += Mathf.Sin(Time.time) * Vector3.back;
+        
+        Vector3 radius = Vector3.one * (BallRadius * 1.25f);
+        minPoint = new Vector3(
+            _ballPositions.Select(p => p.x).Min(),
+            _ballPositions.Select(p => p.y).Min(),
+            _ballPositions.Select(p => p.z).Min()) - radius;
+        maxPoint = new Vector3(
+            _ballPositions.Select(p => p.x).Max(),
+            _ballPositions.Select(p => p.y).Max(),
+            _ballPositions.Select(p => p.z).Max()) + radius;
     }
     
     /// <summary>
