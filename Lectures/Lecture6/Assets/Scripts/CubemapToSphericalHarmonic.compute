@@ -1,0 +1,112 @@
+﻿#pragma kernel ComputeHarmonics
+
+#define PI            3.14159265359f
+#define TWO_PI        6.28318530718f
+#define FOUR_PI       12.56637061436f
+#define INV_PI        0.31830988618f
+#define INV_TWO_PI    0.15915494309f
+#define INV_FOUR_PI   0.07957747155f
+#define HALF_PI       1.57079632679f
+#define INV_HALF_PI   0.636619772367f
+
+#define SQRT_PI       1.772453851f
+#define SQRT_3        1.732050808f
+#define SQRT_5        2.236067977f
+#define SQRT_15       3.872983346f
+
+RWStructuredBuffer<float4> SH_0_1_r;
+RWStructuredBuffer<float4> SH_0_1_g;
+RWStructuredBuffer<float4> SH_0_1_b;
+
+RWStructuredBuffer<float4> SH_2_r;
+RWStructuredBuffer<float4> SH_2_g;
+RWStructuredBuffer<float4> SH_2_b;
+
+RWStructuredBuffer<float4> SH_2_rgb;
+
+TextureCube<half4> _Env;
+SamplerState samplerLinearRepeat;
+
+const int N_SAMPLES = 100;
+
+uint Hash(uint s)
+{
+    s ^= 2747636419u;
+    s *= 2654435769u;
+    s ^= s >> 16;
+    s *= 2654435769u;
+    s ^= s >> 16;
+    s *= 2654435769u;
+    return s;
+}
+
+float Random(uint seed)
+{
+    return float(Hash(seed)) / 4294967295.0; // 2^32-1
+}
+
+float3 SampleColor(float3 direction)
+{   
+    float4 tex = _Env.SampleLevel(samplerLinearRepeat, direction, 0);
+    return tex.rgb;
+}
+
+[numthreads(1024, 1, 1)]
+void ComputeHarmonics(uint id : SV_DispatchThreadID)
+{
+    float3 lOut[9] = {
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0),
+        float3(0, 0, 0)
+    };
+    
+    for (int i = 0; i < N_SAMPLES; i++) {
+        float phi = Random(id * N_SAMPLES + i) * PI;
+        float alpha = Random(id * N_SAMPLES + i) * TWO_PI;
+
+        float3 lightDirection = float3(
+            sin(phi) * cos(alpha),
+            sin(phi) * sin(alpha),
+            cos(phi));
+        
+        float3 sample = SampleColor(lightDirection);
+        
+        lOut[0] += sample * 1 / (2 * SQRT_PI);
+        lOut[1] += sample * -SQRT_3 * lightDirection.y / (2 * SQRT_PI);
+        lOut[2] += sample * SQRT_3 * lightDirection.z / (2 * SQRT_PI);
+        lOut[3] += sample * -SQRT_3 * lightDirection.x / (2 * SQRT_PI);
+        lOut[4] += sample * SQRT_15 * lightDirection.y * lightDirection.x / (2 * SQRT_PI);
+        lOut[5] += sample * -SQRT_15 * lightDirection.y * lightDirection.z / (2 * SQRT_PI);
+        lOut[6] += sample * SQRT_5 * (3 * lightDirection.z * lightDirection.z - 1) / (4 * SQRT_PI);
+        lOut[7] += sample * -SQRT_15 * lightDirection.x * lightDirection.z / (2 * SQRT_PI);
+        lOut[8] += sample *  SQRT_15 * (lightDirection.x * lightDirection.x - lightDirection.y * lightDirection.y) / (4 * SQRT_PI);
+    }
+
+    lOut[0] *= PI * 1 / (2 * SQRT_PI);
+    lOut[1] *= TWO_PI / 3 *  -SQRT_3 / (2 * SQRT_PI);
+    lOut[2] *= TWO_PI / 3 * SQRT_3 / (2 * SQRT_PI);
+    lOut[3] *= TWO_PI / 3 * -SQRT_3 / (2 * SQRT_PI);
+    lOut[4] *= PI / 4 * SQRT_15 / (2 * SQRT_PI);
+    lOut[5] *= PI / 4 * -SQRT_15 / (2 * SQRT_PI);
+    lOut[6] *= PI / 4 * SQRT_5 * 2 / (4 * SQRT_PI);
+    lOut[7] *= PI / 4 * -SQRT_15 / (2 * SQRT_PI);
+    lOut[8] *= PI / 4 * SQRT_15 / (4 * SQRT_PI);
+
+    for (int j = 0; j < 9; j++){
+        lOut[j] *= 4.0f / float(N_SAMPLES);
+    }
+    
+    SH_0_1_r[id] = float4(lOut[3].r, lOut[1].r, lOut[2].r, lOut[0].r);
+    SH_0_1_g[id] = float4(lOut[3].g, lOut[1].g, lOut[2].g, lOut[0].g);
+    SH_0_1_b[id] = float4(lOut[3].b, lOut[1].b, lOut[2].b, lOut[0].b);
+    SH_2_r[id] = float4(lOut[4].r, lOut[5].r, lOut[7].r, lOut[6].r);
+    SH_2_g[id] = float4(lOut[4].g, lOut[5].g, lOut[7].g, lOut[6].g);
+    SH_2_b[id] = float4(lOut[4].b, lOut[5].b, lOut[7].b, lOut[6].b);
+    SH_2_rgb[id] = float4(lOut[8], 0);
+}
